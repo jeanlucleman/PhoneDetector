@@ -1,0 +1,43 @@
+#include "colClass.h"
+
+ClsColWifiDevices::ClsColWifiDevices(String _fileName)
+    {
+        fileName=_fileName;
+    }
+
+
+wifiDeviceType * ClsColWifiDevices::item(int i)
+    {
+        Serial.printf("Item = %d\n",i);
+        return  &wifiDevices[i];
+    }
+
+void ClsColWifiDevices::sort()
+    {
+
+    }
+void ClsColWifiDevices::save()
+    {
+        File file = getFile("w");
+    }
+void ClsColWifiDevices::read()
+    {
+
+    }
+
+String ClsColWifiDevices::arrayNewMac="";
+int  ClsColWifiDevices::rssiThreshold = -80;
+
+File ClsColWifiDevices::getFile(const char* mode)
+  {
+    File myFile;
+    if(mode=="r")
+      {
+        myFile = SD.open(fileName + ".txt", FILE_READ);
+      }
+    else
+      {
+        myFile = SD.open(fileName + ".txt", FILE_WRITE);
+      }
+    return myFile;
+  }

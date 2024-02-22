@@ -1,0 +1,33 @@
+#ifndef COLWIFIDEVICES_H
+  #define COLWIFIDEVICES_H
+  #include <arduino.h>
+  #include <Arduino.h>
+  #include "FS.h"
+  // #include "LittleFS.h"	
+  #include <SD.h>
+      typedef struct 
+        {
+          String mac;
+          float avrgRssi;
+          int count;
+        } wifiDeviceType;
+  class ClsColWifiDevices
+    {
+      public:
+      #define NMAXWIFIDEVICES 30 
+      ClsColWifiDevices(String fileName);
+      wifiDeviceType wifiDevices[NMAXWIFIDEVICES];
+      wifiDeviceType  * item(int i);
+      String fileName;
+      File getFile(const char* mode);
+      bool contains(String mac);
+      void save();
+      void sort();
+      void read();
+      static String arrayNewMac;
+      static int rssiThreshold;
+      private:
+        
+    };
+  
+#endif

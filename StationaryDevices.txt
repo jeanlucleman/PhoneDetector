@@ -1,0 +1,35 @@
+ECFABC,ESPRESSIF;ESP
+840D8E,ESPRESSIF,ESP
+BCDDC2,ESPRESSIF,ESP
+84F3EB,ESPRESSIF,ESP
+B4E62D,ESPRESSIF,ESP
+DC4F22,ESPRESSIF,ESP
+3C3786,NETGEAR,Router
+F4CAE5,FREEBOX,Router
+FFFFFF,??????,??????
+E070EA,HP Inc.,Printer
+B827EB,Raspberry Pi Foundation,Pi
+38B4D3,Bosch-Siemens,Electroménager
+002686,Quantenna Communcations Inc.,Router
+047056,Livebox JLL,Router
+74563C,GIGA-BYTE TECHNOLOGY CO. LTD.,?
+48E7DA,AzureWave Technology Inc.,?
+346B46,Sagemcom Broadband SAS,?
+2050E7,AMPAK Technology Inc.,?
+E49E12,Freebox SAS,Routeur
+884AEA,Texas instrument,?
+0007CB,Freebox SAS,Router
+0024D4,Freebox SAS,Router
+140C76,Freebox SAS,Router
+2066CF,Freebox SAS,Router
+342792,Freebox SAS,Router
+380716,Freebox SAS,Router
+68A378,Freebox SAS,Router
+70FC8F,Freebox SAS,Router
+8C97EA,Freebox SAS,Router
+DC00B0,Freebox SAS,Router
+E49E12,Freebox SAS,Router
+F4CAE5,Freebox SAS,Router
+181E78,SAGEM,Box
+E8C7CF,Wistron Neweb Corporation,?
+D4F547,Google,?
