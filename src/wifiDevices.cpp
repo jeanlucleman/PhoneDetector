@@ -23,14 +23,11 @@ wifiDeviceType * ClsColWifiDevices::item(String mac)
     size_t i=0;
     if(countDevices>0)
       {
-            
         do
           {
-            // Serial.print(i);
-            // Serial.print(" ");
             if((strcmp(wifiDevices[i].mac,mac.c_str()))==0)
               {
-                Serial.printf("Found: %s at position %d ",mac.c_str(),i);
+                Serial.printf("Found: %s at position %02d ",mac.c_str(),i);
                 found=true;
                 return item(i);
               }  
@@ -54,7 +51,6 @@ bool ClsColWifiDevices::contains(String mac)
           }
       }
     return result;
-    
   }
 void ClsColWifiDevices::deleteMe(String mac)
   {
@@ -62,8 +58,6 @@ void ClsColWifiDevices::deleteMe(String mac)
   }
 void ClsColWifiDevices::deleteMe(size_t index)
   {
-    // Serial.printf("Effacement de mac: %s\n", this->item(index)->mac);
-    // Serial.printf("ArrayNewMac avant: %s\n",arrayNewMac.c_str());
     if(index<countDevices)
       {
         for (size_t i = index; i < countDevices-1; i++)
@@ -72,24 +66,18 @@ void ClsColWifiDevices::deleteMe(size_t index)
             // yield();
           }
         wifiDeviceType * temp=item(countDevices-1);
-        // Serial.printf("mac: %s, countDetection: %d\n",temp->mac,temp->countDetection);
         temp->countDetection=0;
         temp->avrgRssi=0;
         temp->ddlsl=false;
         strcpy(temp->history,"");
         strcpy(temp->mac,"");
-        // Serial.printf("ArrayNewMac après: %s\n",arrayNewMac.c_str());
-
         countDevices--;
       }
     else
       {
         Serial.println("Impossible d'effacer un device qui n'existe pas!");
       }
-
-    
   }
-
 void ClsColWifiDevices::swap(int i, int j)
   {
     wifiDeviceType  temp;
@@ -121,52 +109,66 @@ void ClsColWifiDevices::list()
       Serial.printf("mac: %s, détection: %02d  avgRssi:%5.2f\n", this->item(i)->mac, this->item(i)->countDetection, item(i)->avrgRssi);
     }
   }
-
 void ClsColWifiDevices::sort()
   {
     // Serial.println("Avant tri:");
     if(countDevices>1)
       {
-      // list();
-      for (size_t k = countDevices-1;k>1; k--)
-        {
-          bool change=false;        
-          for (size_t i = 0; i < k; i++)
+        for (size_t k = countDevices-1;k>1; k--)
           {
-            if(item(i)->avrgRssi<item(i+1)->avrgRssi)
-              {
-                swap(i,i+1);
-                change=true;
-              }
+            bool change=false;        
+            for (size_t i = 0; i < k; i++)
+            {
+              if(item(i)->avrgRssi<item(i+1)->avrgRssi)
+                {
+                  swap(i,i+1);
+                  change=true;
+                }
+            }
+            if(!change){break;}
           }
-          if(!change){break;}
-        }
-      // Serial.println("Après tri: ");
-      // list();
     }
   }
 void ClsColWifiDevices::save()
   {
     File file = getFile("w");
     for (size_t i = 0; i < countDevices; i++)
-    {
-      char buffer[180];
-      sprintf (buffer, "%s,%5.2f,%03d,%s\n", item(i)->mac, item(i)->avrgRssi,item(i)->countDetection, item(i)->history);
-      file.print(buffer);
-      Serial.printf("%02d: ",i);
-      Serial.print(buffer);
-      item(i)->countDetection=0;
-    }
+      {
+        char buffer[180];
+        sprintf (buffer, "%s,%5.1f,%02d,%s\n", item(i)->mac, item(i)->avrgRssi,item(i)->countDetection, item(i)->history);
+        file.print(buffer);
+        Serial.printf("%02d: ",i);
+        Serial.print(buffer);
+        item(i)->countDetection=0;
+      }
     file.close();
     Serial.println("File saved!");
-    
   }
 void ClsColWifiDevices::read()
   {
+    // File file=getFile("r");
+    // while(file.available())
+    //   {
+    //     String line=file.readStringUntil('\n');  
+    //     Serial.println(line);
+
+    //     String mac=line.substring(0,12);
+    //     String avrgRssi=line.substring(13,18);
+    //     String occurrence=line.substring(19,21);
+    //     String history=line.substring(22);
+    //     Serial.printf("%s %s %s %s\n",mac.c_str(),avrgRssi.c_str(),occurrence.c_str(),history.c_str());
+    //     wifiDeviceType  * thisDevice= item(mac); 
+    //     thisDevice->avrgRssi=avrgRssi.toFloat();
+    //     thisDevice->countDetection=occurrence.toInt();
+    //     strcpy(thisDevice->history, history.c_str());
+    //     Serial.println();
+
+    //   } 
+    // Serial.println();
+
+
 
   }
-
-
 File ClsColWifiDevices::getFile(const char* mode)
   {
     File myFile;

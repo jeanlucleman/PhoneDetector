@@ -1,17 +1,17 @@
-/* 
-Friend Detector by Ricardo Oliveira, forked by Skickar 9/->/2018
-See https://github.com/skickar/FriendDetector/tree/master
+/* This module allows to detect presence of trusted persons at home by recognition of their phone. For this their phone but be connected on home wifi 
+on the 2.4 gHz channel (It will not work with 5 gHz because ESP8266 works only on 2.4gHz).
+For this, the software must learn what are the trusted phone. This is done once by seleting a learning mode (push button), with a dedicated lead blinking quickly to 
+indicate this learning mode. The phone must be let for a few minutes close to the box allowing to detect a new phone with high strength. The blinking led will 
+stop when recognition is done. The système will then switch automatically in monitoring mode (led on not blinking).
+In the monitoring mode the system accept a low strength. Trust presence will be declared if a trust signal is received, even with low strength. Absence will be
+declared if none of trusted phone are there. 
+The trusted data are saved in a file
 
-
-The function of this code is to read nearby 2.4 GHz Wi-Fi traffic in the form of packets. These packets are compared
-to a list of MAC addresses we wish to track, and if the MAC address of a packet matches one on the list, the presence 
-in house can be validated*/
+*/
 
 #include "esppl_functions.h"
-// #include <ESP8266WiFi.h>
 #include "global.h"
 #include "clock.h"
-// #include <NTPClient.h>  // voir https://randomnerdtutorials.com/esp8266-nodemcu-date-time-ntp-client-server-arduino/
 #include <SPI.h>
 #include <SD.h>
 /* pin connexion:
@@ -26,21 +26,14 @@ in house can be validated*/
               D2            D1
 */
 
-// #include <espnow.h> // https://randomnerdtutorials.com/esp-now-two-way-communication-esp8266-nodemcu/
-//Authentication Variables that will be used by the UDP clients (doorSensores)
-// String AP_SSID, AP_PSW, STA_SSID, STA_PSW; 
-// String     AP_SSID;                  // WIFI Name of this Access Point giving access to the ESP8266 though AP mode (ex. 192.168.4.1)
-// String     AP_PSW;                   // Password to access this AP
-//Authentication Variables that will be used by the http clients (users)
-// String STA_SSID;                      // WIFI Name of the router allowing access to the ESP8266 through the home router (ex. 192.168.2.98)
-// String STA_PSW;                       // PSW of home router
-//WiFi settings for the AP mode
-// IPAddress APlocal_IP(192, 168, 4, 10);   //Access Point (AP) Local IP Address
-// IPAddress APgateway(192, 168, 4, 1);     //Access Point (AP) Gateway Address
-// IPAddress APsubnet(255, 255, 255, 0);    //Access Point (AP) Subnet Address
-  // void setupWifi();                       // Start wifi in AP and STA modes
-  // void startServer();                     // Start the server on this ESP8266
-  // void checkWifi();                       // Check wifi status and setup wifi when not connected 
+// Scanning mode
+  enum enmScanningMode{ // A blind schedule can be disabled, enabled with the same hour each day or enabled by sunrise, sunset time changing automatically each day
+    undefined=0,    
+    sniffing=1,
+    learning=2,
+    monitoring=3,
+  } ;
+  int cbMode=enmScanningMode::sniffing;
   void printDated(String text);           // Format serial output with date
   void printlnDated(String text);         // Format serial output with date and CR
   bool setupClock();                      // Initialize a NTP client to connect on a NTP server to get time and date
@@ -95,14 +88,14 @@ There are 3 loops to record wifi signals
   Data are saved in a file containing date in the filename. Then data are resetted (could be by restarting ESP).
   At the start of this loop, the date is updated
 */
-unsigned long millisLastSniffing;
+unsigned long millisLastSniffing; // The last time a short loop to sniff started
 unsigned long sniffingPeriod=60000; // I listen during one minute
-// unsigned long millisLastSaving;
-// #define SAVINGSNIFFINGRATIO 5
-int maxCountShortLoop=5;
-int countShortLoop=0;
-// unsigned long savingPeriod=sniffingPeriod*SAVINGSNIFFINGRATIO; // and after x periods of listening I save the result
-size_t indexMediumLoop=0;
+
+int maxCountShortLoop=5; // Each maxCountShortLoop short loop, a medium loop action is made to make the synthesis of these short loops 
+int countShortLoop=0; // counter to count the short loop
+size_t indexMediumLoop=0; // The medium loop is a period during which is observed the presence of a phone. A string with 0 or 1 (one digit per period) indicates 
+// the presence of not. In case a phone starts in the middle of day, this index is used to fill 0 during the previous period when it was not 'existing'
+
 //https://maclookup.app/
   //  {0x9A, 0x8F, 0xDC, 0x84, 0x01, 0x42}
   //  {0x2E, 0x7C, 0xA6, 0x26, 0xBC, 0xDC} JLL
@@ -121,33 +114,35 @@ const uint8_t txPin = 5; // D1
 
 bool cbEnabled=true;
 void cb(esppl_frame_info *info);
+void sniff(esppl_frame_info *info);
 bool maccmp(uint8_t *mac1, uint8_t *mac2);
-void printDirectory(File dir, int numTabs) {
-// int colcnt =0;
-while(true) {
-  File entry =  dir.openNextFile();
-  if (! entry) {
-    // no more files
-    break;
-   }
-   if (numTabs > 0) {
-     for (uint8_t i=0; i<=numTabs; i++) {
-       Serial.print('\t');
-     }
-   }
-   Serial.print(entry.name());
-   if (entry.isDirectory()) {
-     Serial.println("/");
-     printDirectory(entry, numTabs+1);
-   } else
-   {
-     // files have sizes, directories do not
-     Serial.print("\t");
-     Serial.println(entry.size(), DEC);
-   }
-   entry.close();
+void printDirectory(File dir, int numTabs) 
+  {
+    // int colcnt =0;
+    while(true) {
+      File entry =  dir.openNextFile();
+      if (! entry) {
+        // no more files
+        break;
+      }
+      if (numTabs > 0) {
+        for (uint8_t i=0; i<=numTabs; i++) {
+          Serial.print('\t');
+        }
+      }
+      Serial.print(entry.name());
+      if (entry.isDirectory()) {
+        Serial.println("/");
+        printDirectory(entry, numTabs+1);
+      } else
+      {
+        // files have sizes, directories do not
+        Serial.print("\t");
+        Serial.println(entry.size(), DEC);
+      }
+      entry.close();
+      }
   }
-}
 void setup() 
   { 
     Serial.begin(74880);                       //Set Serial Port to 115200 baud
@@ -157,7 +152,6 @@ void setup()
         return;
       }
     Serial.println();
-    
     setupClock(); 
     #ifdef OTA
       ArduinoOTA.setHostname("ESP8266");
@@ -180,17 +174,22 @@ void setup()
       });
       ArduinoOTA.begin();
     #endif
-    debuglnDated("Setup completed!");
+    // wifiDevices.read();
+    Serial.println("11");
+    delay(500);
     esppl_init(cb);
+    Serial.println("Starting CB");
     esppl_sniffing_start();
+
     Serial.println("Setup completed!");
+    delay(1000);
   }
 
 void loop() 
   { 
     currentMillis=millis();
     // Mettre ici  serialComHandle();
-    // myCom->readString();
+    myCom->readString();
     // if (myCom->dataAvailable())
     //   {
         
@@ -203,13 +202,11 @@ void loop()
     if(millis()>timeLastPresence+600000 and presence)
       {
         presence=false;
-        // Serial.println("\nAppartement vide, enclenchement de l'alarme");
       }
-    if(currentMillis>millisLastSniffing + sniffingPeriod) // short loop
+    if((currentMillis>millisLastSniffing + sniffingPeriod) and cbMode==enmScanningMode::sniffing) // short loop
       {
         cbEnabled=false;
-
-        Serial.printf("short loop n° %d\n", countShortLoop);
+        Serial.printf("short loop n° %02d\n", countShortLoop);
         wifiDevices.list();
         Serial.println();
         wifiDevices.arrayNewMac="";
@@ -217,8 +214,6 @@ void loop()
         if (countShortLoop==maxCountShortLoop) // Medium loop
           {
             countShortLoop=0;
-            // Serial.println("Avant deleting low occurrence");
-            // wifiDevices.list();
             size_t index=0;
             // à chaque boucle, supprimer les lignes avec une très faible occurence de la boucle courante
             do
@@ -230,9 +225,6 @@ void loop()
                     index++;
                   }
               } while (index<wifiDevices.countDevices);
-            // Serial.println("Après effacement des faibles occurences:");
-            // wifiDevices.list();
-            // Serial.println("========================");
             wifiDevices.sort();
             for (size_t i = 0; i < wifiDevices.countDevices; i++)
               {
@@ -261,10 +253,7 @@ void loop()
         cbEnabled=true;
         millisLastSniffing=millis();
       }
-   
   }
-
-
 bool maccmp(uint8_t *mac1, uint8_t *mac2) 
   {
     for (int i=0; i < ESPPL_MAC_LEN; i++) 
@@ -288,11 +277,58 @@ void getStringMac(uint8_t addr[],String &shortMac, String &longMac)
       }
   }
 int n=10;
-// deviceDataType * getDeviceData(String longMac)
-//   {
+void getSsid(uint8_t addr[],uint8_t ssidLength,String &rssi)
+  {
+    char buffer[33];
+    rssi="";
+    for (size_t i = 0; i < ssidLength; i++)
+      {
+        // Serial.printf("%d ",addr[i] );
+        
 
-//   }
+        // if(addr[i]==0 || addr[i]==255)
+        //   {
+        //     buffer[i]='\0';
+        //     break;
+        //   }
+        // else
+        //   {
+            buffer[i]=addr[i];
+          // }
+        // sprintf (buffer, "%02X", addr[i]);
+        // Serial.write(addr[i]);// rssi+=buffer;
+      }
+    buffer[ssidLength]='\0';
+    // Serial.printf("%s ",buffer);
+    rssi=buffer;
+  }
 void cb(esppl_frame_info *info) 
+  {
+    // Serial.print("x");
+    String shortMac;// 3 first byte of MAC to check if the device belongs to the stationary devices such routers.
+    String longMac; // Mac address of the device written as string like 2E169B94F6F2
+    String ssid;
+    switch (cbMode)
+      {
+        case enmScanningMode::sniffing:
+          sniff(info);
+          break;
+        case enmScanningMode::learning:
+          getStringMac(info->sourceaddr, shortMac, longMac); // To define the short and long MAC
+          // Serial.printf("mac: %s\n",longMac.c_str());
+          getSsid(info->ssid,info->ssid_length,ssid);
+          if(info->rssi>-40)
+            {
+              Serial.printf("%s %s %d\n",longMac.c_str(),ssid.c_str(),info->rssi);
+            }
+          break;
+        default:
+
+          break;
+      }
+  }
+
+void sniff(esppl_frame_info *info)
   {
     if(cbEnabled)
       {
@@ -301,11 +337,8 @@ void cb(esppl_frame_info *info)
         getStringMac(info->sourceaddr, shortMac, longMac); // To define the short and long MAC
         if(!colStationaryDevices.contains(shortMac)) // Stationary devices such as router are not considered
           {
-            // Serial.print("1");
-            
             if(info->rssi>wifiDevices.rssiThreshold) // We look at device with rssi greater than the threshold
               {
-
                 if(wifiDevices.arrayNewMac.indexOf(longMac)==-1) // Device are checked and recorded only once in the sniffingPeriod
                   {
                     if(wifiDevices.checkFreeSpace() || wifiDevices.contains(longMac)) 
@@ -322,63 +355,14 @@ void cb(esppl_frame_info *info)
                           {avrgRssi=float(info->rssi);}// 
                         else
                           {avrgRssi=thisDevice->avrgRssi;}
-            // Serial.print("6");                        
                         thisDevice->avrgRssi=((n-1)*avrgRssi+float(info->rssi))/n;
-                        // Serial.print(longMac + " " );
-                        Serial.printf(" -> %d ",info->rssi);
-                        // Serial.print(" ")   ;
-                        // Serial.print(info->ssid);
-                        // Serial.print(" ");
-                        Serial.printf(" %d %5.2f %02d\n",thisDevice->countDetection,thisDevice->avrgRssi,wifiDevices.countDevices );
+                        Serial.printf(" -> %02d ",info->rssi);
+                        Serial.printf(" %02d %5.2f %02d\n",thisDevice->countDetection,thisDevice->avrgRssi,wifiDevices.countDevices );
 
                       }
-
-
                   }
               }
           }
-      
-
-        // if(info->rssi>wifiDevices.rssiThreshold) // We look at device with rssi greater than the threshold
-        //   {
-        //     getStringMac(info->sourceaddr, shortMac, longMac); // To define the short and long MAC
-        //     // getStringMac(info->receiveraddr, shortMacR, longMacR);
-        //     // if(arrayNewMac.indexOf(longMac)==-1) // Device are checked and recorded only once in the sniffingPeriod
-        //     if(wifiDevices.arrayNewMac.indexOf(longMac)==-1) // Device are checked and recorded only once in the sniffingPeriod
-        //       {
-        //         if(!colStationaryDevices.contains(shortMac)) // Stationary devices such as router are not considered
-        //           {
-        //             // arrayNewMac+=longMac; // This array now contains the current MAC so that it will be no more considered in the sniffingPeriod
-        //             if(wifiDevices.countDevices<NMAXWIFIDEVICES)
-        //               {
-
-        //               }
-        //     // Si l'array de new mac est inférieur à la limite, sinon on ne traite pas....        
-        //             wifiDevices.arrayNewMac+=longMac; // This array now contains the current MAC so that it will be no more considered in the sniffingPeriod
-        //             Serial.print(longMac + " ");
-        //             // retrieve or create if new a deviceData
-        //             // deviceDataType * thisDeviceData =  getDeviceData(longMac);
-        //     //  wifiDevices.item(longMac)->count++;
-        //             int count=colSniffedDevices.getDescription(longMac).toInt()+1; 
-        //             float avrgRssi;
-        //             if (count==1)
-        //               {avrgRssi=float(info->rssi);}// 
-        //             else
-        //               {avrgRssi=colSniffedDevices.getValue(longMac,"0").toFloat();}
-        //             avrgRssi=((n-1)*avrgRssi+float(info->rssi))/n;
-        //             // long sumRSSI=colSniffedDevices.getValue(longMac,"0").toInt(); 
-
-        //             // Serial.println(prevRssi);
-        //             // colSniffedDevices.setValue(longMac, String(sumRSSI+info->rssi+100),String(count),false);
-        //             colSniffedDevices.setValue(longMac, String(avrgRssi),String(count),false);
-
-        //             // Serial.printf(" %d %li ",count,avrgRssi );
-        //             // Serial.print(" - R: " + longMacR + " ");
-        //             Serial.print(info->rssi);   
-        //             Serial.print(" ");
-        //             Serial.printf(" %d %5.2f %d\n",count,avrgRssi,colSniffedDevices.size() );
-        //           }  
-        //       }
         for (int i=0; i<LIST_SIZE; i++) 
           {
           if (maccmp(info->sourceaddr, friendmac[i]) || maccmp(info->receiveraddr, friendmac[i])) 

@@ -17,7 +17,7 @@
   class ClsColWifiDevices
     {
       public:
-        #define NMAXWIFIDEVICES 30 
+        #define NMAXWIFIDEVICES 40 
         ClsColWifiDevices(String fileName);
         wifiDeviceType wifiDevices[NMAXWIFIDEVICES];
         wifiDeviceType  * item(int i);
