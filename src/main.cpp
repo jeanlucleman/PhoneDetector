@@ -14,6 +14,7 @@ The trusted data are saved in a file
 #include "clock.h"
 #include <SPI.h>
 #include <SD.h>
+
 /* pin connexion:
   SD card  ESP8266(wifi)    ESP8266 (hub)
   GND         GND           GND
@@ -33,7 +34,7 @@ The trusted data are saved in a file
     learning=2,
     monitoring=3,
   } ;
-  int cbMode=enmScanningMode::sniffing;
+  int cbMode=enmScanningMode::learning;
   void printDated(String text);           // Format serial output with date
   void printlnDated(String text);         // Format serial output with date and CR
   bool setupClock();                      // Initialize a NTP client to connect on a NTP server to get time and date
@@ -55,20 +56,20 @@ bool staModeOK=false;  // Report success of STA connexion
 
 */
 
-File root;
-#define LIST_SIZE 2
-uint8_t friendmac[LIST_SIZE][ESPPL_MAC_LEN] = {
-  {0x2E, 0x7C, 0xA6, 0x26, 0xBC, 0xDC} 
-  ,{0x7A, 0xB3, 0x2E, 0xEE, 0x05, 0x35} 
-};
+// File root;
+// #define LIST_SIZE 2
+// uint8_t friendmac[LIST_SIZE][ESPPL_MAC_LEN] = {
+//   {0x2E, 0x7C, 0xA6, 0x26, 0xBC, 0xDC} 
+//   ,{0x7A, 0xB3, 0x2E, 0xEE, 0x05, 0x35} 
+// };
 /*
  * This is your friend's name list
  * put them in the same order as the MAC addresses
  */
-String friendname[LIST_SIZE] = {
-   "Jean-Luc"
-  ,"Geneviève"
-  };
+// String friendname[LIST_SIZE] = {
+//    "Jean-Luc"
+//   ,"Geneviève"
+//   };
 
 
 
@@ -88,9 +89,10 @@ There are 3 loops to record wifi signals
   Data are saved in a file containing date in the filename. Then data are resetted (could be by restarting ESP).
   At the start of this loop, the date is updated
 */
+// unsigned long millisLastPresence;
 unsigned long millisLastSniffing; // The last time a short loop to sniff started
 unsigned long sniffingPeriod=60000; // I listen during one minute
-
+char lastStrongMac[13];
 int maxCountShortLoop=5; // Each maxCountShortLoop short loop, a medium loop action is made to make the synthesis of these short loops 
 int countShortLoop=0; // counter to count the short loop
 size_t indexMediumLoop=0; // The medium loop is a period during which is observed the presence of a phone. A string with 0 or 1 (one digit per period) indicates 
@@ -101,7 +103,18 @@ size_t indexMediumLoop=0; // The medium loop is a period during which is observe
   //  {0x2E, 0x7C, 0xA6, 0x26, 0xBC, 0xDC} JLL
   // ,{0x7A, 0xB3, 0x2E, 0xEE, 0x05, 0x35} GVV
 
-unsigned long timeLastPresence;
+
+
+ // Learning mode
+
+ClsKeyValues newTrustedPhones;
+bool requestStartLearning=false;
+unsigned long millisStartLearning;
+unsigned long learningDuration=60000;
+// int cumulMac=0;
+String lastMacDetected;
+// Monitoring mode
+unsigned long millisLastPresence;
 bool presence=false;
 
 
@@ -176,13 +189,17 @@ void setup()
     #endif
     // wifiDevices.read();
     Serial.println("11");
+    cbMode=enmScanningMode::undefined;
+    requestStartLearning=false;
     delay(500);
     esppl_init(cb);
     Serial.println("Starting CB");
     esppl_sniffing_start();
-
     Serial.println("Setup completed!");
     delay(1000);
+
+
+
   }
 
 void loop() 
@@ -199,10 +216,7 @@ void loop()
         esppl_set_channel(i);
         while (esppl_process_frames()) {}
       }
-    if(millis()>timeLastPresence+600000 and presence)
-      {
-        presence=false;
-      }
+
     if((currentMillis>millisLastSniffing + sniffingPeriod) and cbMode==enmScanningMode::sniffing) // short loop
       {
         cbEnabled=false;
@@ -252,6 +266,28 @@ void loop()
         Serial.println("Re start of sniffing...");
         cbEnabled=true;
         millisLastSniffing=millis();
+      }
+    if(requestStartLearning)
+      {
+        Serial.println("Début de la période d'apprentissage");
+        requestStartLearning=false;
+        millisStartLearning=millis();
+        cbMode=enmScanningMode::learning;
+      }
+    if(millis()>millisStartLearning+learningDuration and cbMode==enmScanningMode::learning)
+      {
+        Serial.println("Fin de la période d'apprentissage");
+
+        cbMode=enmScanningMode::undefined;
+
+
+
+        cbMode=enmScanningMode::monitoring;
+      }
+    if(millis()>millisLastPresence+60000 and presence)
+      {
+        presence=false;
+        Serial.println("Alarme activée!");
       }
   }
 bool maccmp(uint8_t *mac1, uint8_t *mac2) 
@@ -308,6 +344,9 @@ void cb(esppl_frame_info *info)
     String shortMac;// 3 first byte of MAC to check if the device belongs to the stationary devices such routers.
     String longMac; // Mac address of the device written as string like 2E169B94F6F2
     String ssid;
+    getStringMac(info->sourceaddr, shortMac, longMac); 
+          // wifiDeviceType * thisDevice=wifiDevices.item(longMac);
+    wifiDeviceType * thisDevice=wifiDevices.item(longMac); 
     switch (cbMode)
       {
         case enmScanningMode::sniffing:
@@ -319,9 +358,73 @@ void cb(esppl_frame_info *info)
           getSsid(info->ssid,info->ssid_length,ssid);
           if(info->rssi>-40)
             {
-              Serial.printf("%s %s %d\n",longMac.c_str(),ssid.c_str(),info->rssi);
+              if(!colStationaryDevices.contains(shortMac)) // Stationary devices such as router are not considered
+                {
+                if(newTrustedPhones.contains(longMac)||newTrustedPhones.checkFreeSpace())
+                  {
+                    keyValueType * newTrustedPhone = newTrustedPhones.item(longMac);
+                    // newTrustedPhone->value=newTrustedPhone->value+1;
+                    if(lastMacDetected==longMac)
+                      {
+                        newTrustedPhone->value=newTrustedPhone->value+1;
+                      }
+                    else
+                      {newTrustedPhone->value=0;}
+                    lastMacDetected=longMac;
+                    Serial.printf("%s %s %03d %03d\n",longMac.c_str(),ssid.c_str(),info->rssi,newTrustedPhone->value); 
+                  }
+                }
+            }
+
+          
+          break;
+        case enmScanningMode::undefined:
+          if(!colStationaryDevices.contains(shortMac)) // Stationary devices such as router are not considered
+            {
+              if(info->rssi>-35)
+                {
+                  if(!thisDevice->isTrusted)
+                    {
+                      Serial.printf("Strong mac: %s\n",longMac.c_str());
+                      if(strcmp(lastStrongMac,longMac.c_str())==0)
+                        {
+                          thisDevice->strongCount++;
+                          Serial.printf("Strong count increased to %02d\n",thisDevice->strongCount);
+                          if(thisDevice->strongCount>10)
+                            {
+                              thisDevice->isTrusted=true;
+                              Serial.println("This device is now trusted!");
+                            }
+
+                        }
+                      
+                      else
+                        {
+                          thisDevice->strongCount=0;
+                          // wifiDevices.deleteMe(longMac);
+
+                        }
+                      strcpy(lastStrongMac,longMac.c_str());
+                    }
+
+                }
+
+            }
+          if(thisDevice->isTrusted)
+            {
+              
+              if(!presence){Serial.println("Presence detected!");}
+              presence=true;
+              Serial.print("p"); // Switch on a led for 200 ms
+              millisLastPresence=millis();
+            }          
+          else 
+            {
+              wifiDevices.deleteMe(longMac);
             }
           break;
+
+
         default:
 
           break;
@@ -363,19 +466,19 @@ void sniff(esppl_frame_info *info)
                   }
               }
           }
-        for (int i=0; i<LIST_SIZE; i++) 
-          {
-          if (maccmp(info->sourceaddr, friendmac[i]) || maccmp(info->receiveraddr, friendmac[i])) 
-            {
-              // Serial.printf("%s (%d)\n",friendname[i].c_str(),info->rssi);
-              if(!presence)
-                {
-                  presence=true;
-                  timeLastPresence=millis();  
-                  // Serial.printf("\nPresence (%s). Désactivation de l'alarme\n", friendname[i].c_str());
-                }
-            }
-          } 
+        // for (int i=0; i<LIST_SIZE; i++) 
+        //   {
+        //   if (maccmp(info->sourceaddr, friendmac[i]) || maccmp(info->receiveraddr, friendmac[i])) 
+        //     {
+        //       // Serial.printf("%s (%d)\n",friendname[i].c_str(),info->rssi);
+        //       if(!presence)
+        //         {
+        //           presence=true;
+        //           timeLastPresence=millis();  
+        //           // Serial.printf("\nPresence (%s). Désactivation de l'alarme\n", friendname[i].c_str());
+        //         }
+        //     }
+        //   } 
       }
   }
 

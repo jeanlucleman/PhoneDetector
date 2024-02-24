@@ -7,6 +7,7 @@
 #include <SPI.h>
 #include <SD.h>
 #include "wifiDevices.h"
+#include "dictionary.h"
 
 #define DEBUG                           // Comment this line to disable debug
 #ifdef DEBUG

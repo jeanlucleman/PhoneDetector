@@ -33,3 +33,5 @@ F4CAE5,Freebox SAS,Router
 181E78,SAGEM,Box
 E8C7CF,Wistron Neweb Corporation,?
 D4F547,Google,?
+2A16AD,PCJLL,wifi card
+2816AD,PCJLL,wifi card

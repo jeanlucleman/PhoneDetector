@@ -10,6 +10,8 @@
           char mac[13];
           float avrgRssi;
           int countDetection;
+          bool isTrusted;
+          int strongCount;
           bool ddlsl; //detection during last short loop
           char history[145]; // 6/hours * 24 hours +1
 
@@ -17,7 +19,7 @@
   class ClsColWifiDevices
     {
       public:
-        #define NMAXWIFIDEVICES 40 
+        #define NMAXWIFIDEVICES 100 
         ClsColWifiDevices(String fileName);
         wifiDeviceType wifiDevices[NMAXWIFIDEVICES];
         wifiDeviceType  * item(int i);

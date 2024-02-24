@@ -27,7 +27,7 @@ wifiDeviceType * ClsColWifiDevices::item(String mac)
           {
             if((strcmp(wifiDevices[i].mac,mac.c_str()))==0)
               {
-                Serial.printf("Found: %s at position %02d ",mac.c_str(),i);
+                // Serial.printf("Found: %s at position %02d\n",mac.c_str(),i);
                 found=true;
                 return item(i);
               }  
@@ -35,7 +35,9 @@ wifiDeviceType * ClsColWifiDevices::item(String mac)
           } while(!found and i!=countDevices);
           }
 
-    Serial.printf("Creation d'un nouveau device en position %02d, mac = %s ",i,mac.c_str());
+    // Serial.printf("Creation d'un nouveau device en position %02d, mac = %s\n",i,mac.c_str());
+    // Serial.printf("++ %02d, mac = %s | ",i,mac.c_str());
+    
     strcpy(wifiDevices[i].mac,mac.c_str());
     countDevices++;
     return  &wifiDevices[i];
@@ -54,7 +56,17 @@ bool ClsColWifiDevices::contains(String mac)
   }
 void ClsColWifiDevices::deleteMe(String mac)
   {
-
+    int index;
+    for (size_t i = 0; i < countDevices; i++)
+      {
+        if((strcmp(wifiDevices[i].mac,mac.c_str()))==0)
+          {
+            index=i;
+            break;
+          }
+      }
+    // Serial.printf("-- %02d, mac = %s | ",index,mac.c_str());
+    deleteMe(index);
   }
 void ClsColWifiDevices::deleteMe(size_t index)
   {
@@ -86,6 +98,16 @@ void ClsColWifiDevices::swap(int i, int j)
     strcpy(temp.mac,thisDevice1->mac);
     strcpy(thisDevice1->mac,thisDevice2->mac);
     strcpy(thisDevice2->mac, temp.mac);
+
+    temp.isTrusted=thisDevice1->isTrusted;
+    thisDevice1->isTrusted=thisDevice2->isTrusted;
+    thisDevice2->isTrusted=temp.isTrusted;
+
+    
+    temp.strongCount=thisDevice1->strongCount;
+    thisDevice1->strongCount=thisDevice2->strongCount;
+    thisDevice2->strongCount=temp.strongCount;
+
     temp.avrgRssi=thisDevice1->avrgRssi;
     thisDevice1->avrgRssi=thisDevice2->avrgRssi;
     thisDevice2->avrgRssi=temp.avrgRssi;
